@@ -1,29 +1,34 @@
 #!/bin/bash
 
 declare -i connect_timeout=2 transfer_timeout=2 max_redirs=2
-declare -i last_check_max_diff=60 has_cache=0 user_def_cache=0
-declare -r NAGIOS_SUCCESS=0 NAGIOS_WARNING=1 NAGIOS_CRITICAL=2
-cache_file="/var/cache/check-internet/status"
+declare -i last_check_max_diff=60 use_cache=0 user_def_cache=0
+declare -r NAGIOS_SUCCESS=0 NAGIOS_WARNING=1 NAGIOS_CRITICAL=2 NAGIOS_UNKNOWN=3
+
+cache_dir="/var/cache/check-connectivity"
+tag_name="connectivity"
 
 usage() {
   local prog=$(basename $0)
   echo "
-Usage: $prog [ OPTIONS ] <-n n_attempts> <url1> [ url2 ] [ url3 ] [ ... ] [ urlN ]
+Usage: $prog <-4 | -6> [ OPTIONS ] <-n n_attempts> <url1> [ url2 ] [ url3 ] [ ... ] [ urlN ]
 
   Options:
-    -d               debug
-    -n <n_enough>    number of successful attempts to consider internet as UP
+    -4               check IPv4 connectivity
+    -6               check IPv6 connectivity
+    -n <n_enough>    number of successful attempts to consider connectivity as UP
     -c <n seconds>   number of seconds to consider as connection timeout
-    -T <n seconds>   number of seconds to consider as transfer timeout
+    -t <n seconds>   number of seconds to consider as transfer timeout
     -R <n integer>   max number of acceptable url directs
-    -C <file_path>   path of the cache file
+    -D <cache_dir>   directory where to cache connectivity information
+    -T <tag_name>    name to use as the cache file
+    -d               enable debug mode
 "
   exit 1
 }
 
 error() {
   local msg="$1"
-  local ret=${2:-1}
+  local ret=${2:-$NAGIOS_UNKNOWN}
 
   echo "Error: $msg" 1>&2
   exit $ret
@@ -47,10 +52,18 @@ warn() {
 
 # main
 
-unset n_enough
-getopt_flags='n:c:T:R:C:d'
+unset n_enough user_def_tag
+getopt_flags='46dn:c:t:R:D:T:'
+proto=''
 while getopts $getopt_flags OPTNAME; do
   case $OPTNAME in
+    [46])
+      if [ -n "$proto" -a "-$proto" != "-$OPTNAME" ]; then
+        error "either -4 or -6 should be used, not both"
+      else
+        proto="-$OPTNAME"
+      fi
+      ;;
     n)
       if is_number $OPTARG; then
         n_enough=$OPTARG
@@ -65,11 +78,11 @@ while getopts $getopt_flags OPTNAME; do
         error "argument to -c must be numeric"
       fi
       ;;
-    T)
+    t)
       if is_number $OPTARG; then
         transfer_timeout=$OPTARG
       else
-        error "argument to -T must be numeric"
+        error "argument to -t must be numeric"
       fi
       ;;
     R)
@@ -82,12 +95,25 @@ while getopts $getopt_flags OPTNAME; do
     d)
       set -x
       ;;
-    C)
-      cache_file="$OPTARG"
+    D)
+      cache_dir="$OPTARG"
+      if [ ! -e "$cache_dir" ]; then
+        mkdir "$cache_dir"
+        if [ $? -ne 0 ]; then
+          error "unable to create cache dir '$cache_dir'"
+        fi
+      elif [ ! -d "$cache_dir" ]; then
+        error "path '$cache_dir' exists but is not a directory"
+      fi
+
       user_def_cache=1
       ;;
+    T)
+      tag_name="$OPTARG"
+      user_def_tag=1
+      ;;
     *)
-      exit 1
+      exit $NAGIOS_UNKNOWN
       ;;
   esac
 done
@@ -107,11 +133,34 @@ elif [ $n_enough -gt $# ]; then
 "number of urls"
 fi
 
-if [ -e "$cache_file" -a -s "$cache_file" ]; then
+if [ -z "$proto" ]; then
+  error "you need to specify either -4 (for ipv4) or -6 (for ipv6)"
+fi
+
+if [ -z "$user_def_tag" -a "$proto" == "-4" ]; then
+  tag_name+="_ipv4"
+elif [ -z "$user_def_tag" -a "$proto" == "-6" ]; then
+  tag_name+="_ipv6"
+fi
+
+cache_file="$cache_dir/$tag_name"
+if [ -e "$cache_file" -a ! -w "$cache_file" ]; then
+  # cache file exists but is not writable
+  warn "cache file '$cache_file' is not writable"
+elif [ -e "$cache_file" -a -d "$cache_file" ]; then
+  # cache file exists but is a directory !?
+  warn "path to cache file '$cache_file' is actually a directory. Ignoring it..."
+elif [ ! -e "$cache_file" -a -d "$cache_dir" -a -w "$cache_dir" ]; then
+  # cache file doesn't exist but dir is writable
+  use_cache=1
+elif [ -e "$cache_file" -a -w "$cache_file" -a ! -s "$cache_file" ]; then
+  # cache file exists, is writable but is empty
+  use_cache=1
+elif [ -e "$cache_file" -a -w "$cache_file" -a -s "$cache_file" ]; then
+  # cache file exists, is writable and has content
   status_line=$(head -1 "$cache_file")
   if [ $? -ne 0 ]; then
     warn "unable to read from cache file"
-    
   elif ! [[ $status_line =~ ^[0-9]:[0-9]+$ ]]; then
     warn "data from cache file is not in the desired format (exit_code:epoch)"
   else
@@ -119,19 +168,21 @@ if [ -e "$cache_file" -a -s "$cache_file" ]; then
     last_check_time=${status_line##*:}
 
     now=$(date +%s)
+    if [ $? -ne 0 ]; then
+      error "unable to determine current time"
+    fi
+
     if [ $(( $now - $last_check_time )) -le $last_check_max_diff ]; then
       exit $last_status
     fi
-    has_cache=1
+    use_cache=1
   fi
-elif [ $user_def_cache -gt 0 ]; then
-  warn "unable to use cache_file '$cache_file'"
 fi
 
 declare -i n_attempts=0 n_success=0
 while [ $n_success -lt $n_enough -a -n "$1" ]; do
   test_url="$1"
-  curl --connect-timeout $connect_timeout --max-time $transfer_timeout \
+  curl $proto --connect-timeout $connect_timeout --max-time $transfer_timeout \
     -L --max-redirs $max_redirs --retry 0 -o /dev/null -s "$test_url"
   status=$?
   n_attempts+=1
@@ -153,10 +204,14 @@ else
   exit_code=$NAGIOS_CRITICAL
 fi
 
-if [ $has_cache -gt 0 ]; then
+if [ $use_cache -gt 0 ]; then
   now=$(date +%s)
+  if [ $? -ne 0 ]; then
+    error "unable to determine current time"
+  fi
+
   echo "$exit_code:$now" >"$cache_file"
-  [ $? -ne 0 ] && echo "warning: unable to write to cache file"
+  [ $? -ne 0 ] && warn "unable to write to cache file '$cache_file'"
 fi
 
 exit $exit_code
