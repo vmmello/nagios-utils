@@ -3,6 +3,8 @@
 declare -i connect_timeout=2 transfer_timeout=2 max_redirs=2
 declare -i last_check_max_diff=60 use_cache=0 user_def_cache=0
 declare -r NAGIOS_SUCCESS=0 NAGIOS_WARNING=1 NAGIOS_CRITICAL=2 NAGIOS_UNKNOWN=3
+declare -a accepted_opt_names=( connect_timeout transfer_timeout max_redirs last_check_max_diff )
+declare -a received_options
 
 cache_dir="/var/cache/check-connectivity"
 tag_name="connectivity"
@@ -15,15 +17,20 @@ Usage: $prog <-4 | -6> [ OPTIONS ] <-c n_critical> <-w n_warning> <url1> [ url2 
   Options:
     -4               check IPv4 connectivity
     -6               check IPv6 connectivity
-    -c <n attempts>  number of failed attempts to consider as critical
-    -w <n attempts>  number of failed attempts to consider as warning
-    -C <n seconds>   number of seconds to consider as connection timeout
-    -t <n seconds>   number of seconds to consider as transfer timeout
-    -R <n integer>   max number of acceptable HTTP directs
     -D <cache_dir>   directory where to cache connectivity information
     -T <tag_name>    name to use as the cache file
     -N               disable cache (don't cache the result)
     -d               enable debug mode
+    -O name=value    set the given option name to the specified value
+                     Accepted names:
+                         connect_timeout (is)
+                         transfer_timeout (is)
+                         max_redirs (i)
+                         last_check_max_diff (is)
+
+                     Expected value format:
+                         (is = integer seconds, i = integer)
+
 "
   exit 1
 }
@@ -46,6 +53,21 @@ is_number() {
   fi
 }
 
+is_in_array() {
+  local value="$1"
+  shift
+  local array="$2"
+  local v
+
+  for v in "$@"; do
+    if [ "$v" == "$value" ]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 warn() {
   msg="$1"
   
@@ -55,7 +77,7 @@ warn() {
 # main
 
 unset n_failed n_critical user_def_tag use_cache disable_cache
-getopt_flags='46dC:c:t:R:D:T:w:N'
+getopt_flags='46dc:D:w:O:N'
 proto=''
 while getopts $getopt_flags OPTNAME; do
   case $OPTNAME in
@@ -80,28 +102,6 @@ while getopts $getopt_flags OPTNAME; do
         error "argument to -w must be numeric"
       fi
       ;;
-
-    C)
-      if is_number $OPTARG; then
-        connect_timeout=$OPTARG
-      else
-        error "argument to -C must be numeric"
-      fi
-      ;;
-    t)
-      if is_number $OPTARG; then
-        transfer_timeout=$OPTARG
-      else
-        error "argument to -t must be numeric"
-      fi
-      ;;
-    R)
-      if is_number $OPTARG; then
-        max_redirs=$OPTARG
-      else
-        error "argument to -R must be numeric"
-      fi
-      ;;
     d)
       set -x
       ;;
@@ -115,6 +115,24 @@ while getopts $getopt_flags OPTNAME; do
     N)
       disable_cache=1
       ;;
+    O)
+      IFS=, read -a received_options <<< "$OPTARG"
+      for name_val in ${received_options[@]}; do
+        if ! [[ "$name_val" =~ ^([A-Za-z0-9_]+)=(.+) ]]; then
+          warn "skipping invalid option '$name_val'"
+          continue
+        fi
+
+        opt_name=${name_val%%=*}
+        opt_value=${name_val##*=}
+
+        if is_in_array "$opt_name" ${accepted_opt_names[@]}; then
+          eval "$opt_name"="$opt_value"
+        else
+          warn "skipping invalid option name '$opt_name'"
+        fi
+      done
+        ;;
     *)
       exit $NAGIOS_UNKNOWN
       ;;
