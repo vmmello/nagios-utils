@@ -10,15 +10,16 @@ tag_name="connectivity"
 usage() {
   local prog=$(basename $0)
   echo "
-Usage: $prog <-4 | -6> [ OPTIONS ] <-n n_attempts> <url1> [ url2 ] [ url3 ] [ ... ] [ urlN ]
+Usage: $prog <-4 | -6> [ OPTIONS ] <-c n_critical> <-w n_warning> <url1> [ url2 ] [ ... ] [ urlN ]
 
   Options:
     -4               check IPv4 connectivity
     -6               check IPv6 connectivity
-    -n <n_enough>    number of successful attempts to consider connectivity as UP
-    -c <n seconds>   number of seconds to consider as connection timeout
+    -c <n attempts>  number of failed attempts to consider as critical
+    -w <n attempts>  number of failed attempts to consider as warning
+    -C <n seconds>   number of seconds to consider as connection timeout
     -t <n seconds>   number of seconds to consider as transfer timeout
-    -R <n integer>   max number of acceptable url directs
+    -R <n integer>   max number of acceptable HTTP directs
     -D <cache_dir>   directory where to cache connectivity information
     -T <tag_name>    name to use as the cache file
     -d               enable debug mode
@@ -52,8 +53,8 @@ warn() {
 
 # main
 
-unset n_enough user_def_tag
-getopt_flags='46dn:c:t:R:D:T:'
+unset n_failed n_critical user_def_tag
+getopt_flags='46dC:c:t:R:D:T:w:'
 proto=''
 while getopts $getopt_flags OPTNAME; do
   case $OPTNAME in
@@ -64,18 +65,26 @@ while getopts $getopt_flags OPTNAME; do
         proto="-$OPTNAME"
       fi
       ;;
-    n)
+    c)
       if is_number $OPTARG; then
-        n_enough=$OPTARG
+        n_critical=$OPTARG
       else
-        error "argument to -n must be numeric"
+        error "argument to -c must be numeric"
       fi
       ;;
-    c)
+    w)
+      if is_number $OPTARG; then
+        n_warning=$OPTARG
+      else
+        error "argument to -w must be numeric"
+      fi
+      ;;
+
+    C)
       if is_number $OPTARG; then
         connect_timeout=$OPTARG
       else
-        error "argument to -c must be numeric"
+        error "argument to -C must be numeric"
       fi
       ;;
     t)
@@ -126,10 +135,15 @@ if ! hash curl ; then
   error "unable to find curl executable"
 fi
 
-if [ -z "$n_enough" ]; then
-  error "missing command line option -n"
-elif [ $n_enough -gt $# ]; then
-  error "the number of successful attempts can't be greater than the "\
+if [ -z "$n_critical" ]; then
+  error "missing command line option -c"
+elif [ $n_critical -gt $# ]; then
+  error "the number of failed attempts can't be greater than the "\
+"number of urls"
+elif [ -z "$n_warning" ]; then
+  error "missing command line option -w"
+elif [ $n_warning -gt $# ]; then
+  error "the number of warning attempts can't be greater than the "\
 "number of urls"
 fi
 
@@ -179,29 +193,31 @@ elif [ -e "$cache_file" -a -w "$cache_file" -a -s "$cache_file" ]; then
   fi
 fi
 
-declare -i n_attempts=0 n_success=0
-while [ $n_success -lt $n_enough -a -n "$1" ]; do
+declare -i n_failed=0 n_left=$#
+while [ $n_left -gt 0 -a -n "$1" ]; do
+  n_left=$(( $n_left - 1 ))
   test_url="$1"
   curl $proto --connect-timeout $connect_timeout --max-time $transfer_timeout \
     -L --max-redirs $max_redirs --retry 0 -o /dev/null -s "$test_url"
   status=$?
-  n_attempts+=1
-  if [ $status -eq 0 ]; then
-    n_success+=1
-    [ $n_success -eq $n_enough ] && break
-  elif [ $(( $# - 1 + $n_success )) -lt $n_enough ]; then
-    # too many failures
-    # even if upcoming tests succeed, it won't reach $n_enough
+  if [ $status -eq 0 -a $(( $n_left + $n_failed )) -lt $n_critical  ]; then
+    # even if next tests fail, it won't reach $n_critical
+    # so no need to test anymore
+    break
+  elif [ $status -ne 0 -a $n_failed -eq $n_critical ]; then
+    # too many failures, don't need to test anymore
     break
   fi
 
   shift
 done
 
-if [ $n_success -ge $n_enough ]; then
-  exit_code=$NAGIOS_SUCCESS
-else
+if [ $n_failed -eq $n_critical ]; then
   exit_code=$NAGIOS_CRITICAL
+elif [ $n_failed -ge $n_warning ]; then
+  exit_code=$NAGIOS_WARNING
+else
+  exit_code=$NAGIOS_SUCCESS
 fi
 
 if [ $use_cache -gt 0 ]; then
