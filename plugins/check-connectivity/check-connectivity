@@ -157,6 +157,8 @@ elif [ -z "$n_warning" ]; then
 elif [ $n_warning -gt $# ]; then
   error "the number of warning attempts can't be greater than the "\
 "number of urls"
+elif [ $n_critical -eq $n_warning ]; then
+  error "the warning (-w) and critical (-c) values can't be equal"
 fi
 
 if [ -z "$proto" ]; then
