@@ -22,6 +22,7 @@ Usage: $prog <-4 | -6> [ OPTIONS ] <-c n_critical> <-w n_warning> <url1> [ url2 
     -R <n integer>   max number of acceptable HTTP directs
     -D <cache_dir>   directory where to cache connectivity information
     -T <tag_name>    name to use as the cache file
+    -N               disable cache (don't cache the result)
     -d               enable debug mode
 "
   exit 1
@@ -48,13 +49,13 @@ is_number() {
 warn() {
   msg="$1"
   
-  echo "warning: $msg" 1>&2
+  echo "Warning: $msg" 1>&2
 }
 
 # main
 
-unset n_failed n_critical user_def_tag
-getopt_flags='46dC:c:t:R:D:T:w:'
+unset n_failed n_critical user_def_tag use_cache disable_cache
+getopt_flags='46dC:c:t:R:D:T:w:N'
 proto=''
 while getopts $getopt_flags OPTNAME; do
   case $OPTNAME in
@@ -106,20 +107,13 @@ while getopts $getopt_flags OPTNAME; do
       ;;
     D)
       cache_dir="$OPTARG"
-      if [ ! -e "$cache_dir" ]; then
-        mkdir "$cache_dir"
-        if [ $? -ne 0 ]; then
-          error "unable to create cache dir '$cache_dir'"
-        fi
-      elif [ ! -d "$cache_dir" ]; then
-        error "path '$cache_dir' exists but is not a directory"
-      fi
-
-      user_def_cache=1
       ;;
     T)
       tag_name="$OPTARG"
       user_def_tag=1
+      ;;
+    N)
+      disable_cache=1
       ;;
     *)
       exit $NAGIOS_UNKNOWN
@@ -158,28 +152,33 @@ elif [ -z "$user_def_tag" -a "$proto" == "-6" ]; then
 fi
 
 cache_file="$cache_dir/$tag_name"
-if [ -e "$cache_file" -a ! -w "$cache_file" ]; then
-  # cache file exists but is not writable
-  warn "cache file '$cache_file' is not writable"
-elif [ -e "$cache_file" -a -d "$cache_file" ]; then
-  # cache file exists but is a directory !?
-  warn "path to cache file '$cache_file' is actually a directory. Ignoring it..."
-elif [ ! -e "$cache_file" -a -d "$cache_dir" -a -w "$cache_dir" ]; then
-  # cache file doesn't exist but dir is writable
+
+# cache is enabled, cache_dir exists and is writable and
+# cache file is a link or not exists
+if [ -z "$disable_cache" -a -d "$cache_dir" -a -w "$cache_dir" ] && [ -L "$cache_file" -o ! -e "$cache_file" ]; then
   use_cache=1
-elif [ -e "$cache_file" -a -w "$cache_file" -a ! -s "$cache_file" ]; then
-  # cache file exists, is writable but is empty
-  use_cache=1
-elif [ -e "$cache_file" -a -w "$cache_file" -a -s "$cache_file" ]; then
-  # cache file exists, is writable and has content
-  status_line=$(head -1 "$cache_file")
+elif [ -z "$disable_cache" -a ! -e "$cache_dir" ]; then
+  mkdir "$cache_dir"
+  if [ $? -ne 0 ]; then
+    warn "unable to create cache_dir '$cache_dir'. Skipping caching..."
+  fi
+elif [ -z "$disable_cache" -a ! -d "$cache_dir" ]; then
+  warn "cache_dir path '$cache_dir' exists but is not a directory. Skipping caching..."
+elif [ -z "$disable_cache" -a -e "$cache_file" -a ! -L "$cache_file" ]; then
+  warn "cache_file path '$cache_file' exists but is not a symlink. Skipping caching..."
+fi
+
+if [ -n "$use_cache" -a -L "$cache_file" ]; then
+  status_str=$(readlink "$cache_file")
   if [ $? -ne 0 ]; then
     warn "unable to read from cache file"
-  elif ! [[ $status_line =~ ^[0-9]:[0-9]+$ ]]; then
+  elif ! [[ "$status_str" =~ ^[0123]:[0-9]+$ ]]; then
     warn "data from cache file is not in the desired format (exit_code:epoch)"
   else
-    last_status=${status_line%%:*}
-    last_check_time=${status_line##*:}
+    # the cache string is the contents of the link de-referenced
+    # it should be in the format: exit_code:epoch, e.g.: 0:1372741914
+    last_status=${status_str%%:*}
+    last_check_time=${status_str##*:}
 
     now=$(date +%s)
     if [ $? -ne 0 ]; then
@@ -189,7 +188,6 @@ elif [ -e "$cache_file" -a -w "$cache_file" -a -s "$cache_file" ]; then
     if [ $(( $now - $last_check_time )) -le $last_check_max_diff ]; then
       exit $last_status
     fi
-    use_cache=1
   fi
 fi
 
@@ -220,14 +218,15 @@ else
   exit_code=$NAGIOS_SUCCESS
 fi
 
-if [ $use_cache -gt 0 ]; then
+if [ -n "$use_cache" ]; then
   now=$(date +%s)
   if [ $? -ne 0 ]; then
     error "unable to determine current time"
   fi
 
-  echo "$exit_code:$now" >"$cache_file"
-  [ $? -ne 0 ] && warn "unable to write to cache file '$cache_file'"
+  if [ -n "$use_cache" ] && ! ln -sf "$exit_code:$now" "$cache_file"; then
+    warn "unable to link to cache file '$cache_file'"
+  fi
 fi
 
 exit $exit_code
