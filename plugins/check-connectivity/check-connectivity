@@ -92,14 +92,14 @@ while getopts $getopt_flags OPTNAME; do
       if is_number $OPTARG; then
         n_critical=$OPTARG
       else
-        error "argument to -c must be numeric"
+        error "argument to -c must be an integer >= 0"
       fi
       ;;
     w)
       if is_number $OPTARG; then
         n_warning=$OPTARG
       else
-        error "argument to -w must be numeric"
+        error "argument to -w must be an integer >= 0"
       fi
       ;;
     d)
@@ -143,8 +143,9 @@ done
 
 [ $# -eq 0 ] && usage
 
-if ! hash curl ; then
-  error "unable to find curl executable"
+if ! hash curl &>/dev/null ; then
+  error "unable to find the curl executable. This script depends on "\
+"curl being installed and on the PATH"
 fi
 
 if [ -z "$n_critical" ]; then
