@@ -1,0 +1,36 @@
+
+This script verifies the network connectivity by checking the reachability
+of multiple web sites. It implicitly checks for multiple aspects of the 
+connectivity, like:
+
+  * ability to resolve hostnames in DNS
+  * ability to complete a TCP connection in a reasonable time
+  * ability to do a full HTTP data transfer in a reasonable time
+  
+It uses curl to test the network connectivity, so any protocol supported by
+curl can be used to determine network reachability.
+
+
+One of the most relevant use cases is to set it as the check-host command 
+of routers, so that it detects connectivity downtime quickly and avoids 
+floods of downtime notifications for other checks that require 
+Internet connectivity. It's also possible to cache the response in order to
+avoid unnecessary checks in a short interval (when the host is set as parent
+host related to multiple other checks).
+
+IPv4 and IPv6 connectivity should be tested separately in order to test
+routing reachability of each protocol.
+
+It uses the curl program to do the connection tests and measure response 
+times.
+
+
+REQUIREMENTS
+
+bash >= 3.x
+curl program installed
+
+
+CONFIGURATION EXAMPLES
+
+(...soon...)
