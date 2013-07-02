@@ -231,9 +231,9 @@ while [ $n_left -gt 0 -a -n "$1" ]; do
   shift
 done
 
-if [ $n_failed -eq $n_critical ]; then
+if [ $n_critical -gt 0 -a $n_failed -eq $n_critical ]; then
   exit_code=$NAGIOS_CRITICAL
-elif [ $n_failed -ge $n_warning ]; then
+elif [ $n_warning -gt 0 -a $n_failed -ge $n_warning ]; then
   exit_code=$NAGIOS_WARNING
 else
   exit_code=$NAGIOS_SUCCESS
