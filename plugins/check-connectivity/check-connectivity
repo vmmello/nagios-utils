@@ -1,9 +1,9 @@
 #!/bin/bash
 
 declare -i connect_timeout=2 transfer_timeout=2 max_redirs=2
-declare -i last_check_max_diff=60
+declare -i cache_time=60
 declare -r NAGIOS_SUCCESS=0 NAGIOS_WARNING=1 NAGIOS_CRITICAL=2 NAGIOS_UNKNOWN=3
-declare -a accepted_opt_names=( connect_timeout transfer_timeout max_redirs last_check_max_diff curl_opts net_if )
+declare -a accepted_opt_names=( connect_timeout transfer_timeout max_redirs cache_time curl_opts net_if )
 declare -a received_options
 
 cache_dir="/var/cache/check-connectivity"
@@ -26,7 +26,7 @@ Usage: $prog <-4 | -6> [ OPTIONS ] <-c n_critical> <-w n_warning> <url1> [ url2 
                          connect_timeout (is)
                          transfer_timeout (is)
                          max_redirs (i)
-                         last_check_max_diff (is)
+                         cache_time (is)
                          curl_opts (S)
                          net_if (S)
                      Expected value format:
@@ -207,7 +207,7 @@ if [ -n "$use_cache" -a -L "$cache_file" ]; then
       error "unable to determine current time"
     fi
 
-    if [ $(( $now - $last_check_time )) -le $last_check_max_diff ]; then
+    if [ $(( $now - $last_check_time )) -le $cache_time ]; then
       exit $last_status
     fi
   fi
