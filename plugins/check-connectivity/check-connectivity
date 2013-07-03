@@ -1,7 +1,7 @@
 #!/bin/bash
 
 declare -i connect_timeout=2 transfer_timeout=2 max_redirs=2
-declare -i last_check_max_diff=60 use_cache=0 user_def_cache=0
+declare -i last_check_max_diff=60
 declare -r NAGIOS_SUCCESS=0 NAGIOS_WARNING=1 NAGIOS_CRITICAL=2 NAGIOS_UNKNOWN=3
 declare -a accepted_opt_names=( connect_timeout transfer_timeout max_redirs last_check_max_diff )
 declare -a received_options
