@@ -117,17 +117,17 @@ while getopts $getopt_flags OPTNAME; do
       ;;
     O)
       IFS=, read -a received_options <<< "$OPTARG"
-      for name_val in ${received_options[@]}; do
+      for name_val in "${received_options[@]}"; do
         if ! [[ "$name_val" =~ ^([A-Za-z0-9_]+)=(.+) ]]; then
           warn "skipping invalid option '$name_val'"
           continue
         fi
 
         opt_name=${name_val%%=*}
-        opt_value=${name_val##*=}
+        opt_value=${name_val#*=}
 
         if is_in_array "$opt_name" ${accepted_opt_names[@]}; then
-          eval "$opt_name"="$opt_value"
+          eval "$opt_name"=\""$opt_value"\"
         else
           warn "skipping invalid option name '$opt_name'"
         fi
