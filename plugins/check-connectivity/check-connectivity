@@ -219,6 +219,8 @@ while [ $n_left -gt 0 -a -n "$1" ]; do
   curl $proto --connect-timeout $connect_timeout --max-time $transfer_timeout \
     -L --max-redirs $max_redirs --retry 0 -o /dev/null -s "$test_url"
   status=$?
+  [ $status -ne 0 ] && n_failed+=1
+
   if [ $status -eq 0 -a $(( $n_left + $n_failed )) -lt $n_critical  ]; then
     # even if next tests fail, it won't reach $n_critical
     # so no need to test anymore
