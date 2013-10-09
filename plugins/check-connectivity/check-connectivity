@@ -198,7 +198,7 @@ while getopts $getopt_flags OPTNAME; do
         opt_value=${name_value#*=}
 
         if is_in_array "$opt_name" ${accepted_opt_names[@]}; then
-          eval "$opt_name"=\""$opt_value"\"
+          eval "$opt_name"=`printf '%q' "$opt_value"`
         else
           warn "skipping invalid option name '$opt_name'"
         fi
