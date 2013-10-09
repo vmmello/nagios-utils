@@ -75,6 +75,55 @@ warn() {
   echo "Warning: $msg" 1>&2
 }
 
+state_str() {
+  local code="$1"
+  local output=""
+
+  if [ $code -eq $NAGIOS_SUCCESS ]; then
+    output+='OK'
+  elif [ $code -eq $NAGIOS_WARNING ]; then
+    output+='WARNING'
+  elif [ $code -eq $NAGIOS_CRITICAL ]; then
+    output+='CRITICAL'
+  elif [ $code -eq $NAGIOS_UNKNOWN ]; then
+    output+='UNKNOWN'
+  else
+    output=""
+    return 1
+  fi
+
+  echo -n "$output"
+
+  return 0
+}
+
+status_line() {
+  local code="$1"
+  local n_ok="$2"
+  local n_failed="$3"
+
+  local line="" status=""
+
+  line="`state_str $code` -"
+  if [ $n_ok -gt 0 ]; then
+    line+=" $n_ok successful repl"
+    if [ $n_ok -gt 1 ]; then
+      line+="ies"
+    else
+      line+="y"
+    fi
+  fi
+
+  if [ $n_failed -gt 0 ]; then
+    line+=" $n_failed failed request"
+    if [ $n_failed -gt 1 ]; then
+      line+="s"
+    fi
+  fi
+
+  echo "$line"
+}
+
 # main
 
 unset n_failed n_critical user_def_tag use_cache disable_cache curl_opts net_if
@@ -229,12 +278,17 @@ if [ -n "$use_cache" -a -L "$cache_file" ]; then
     fi
 
     if [ $(( $now - $last_check_time )) -le $cache_time ]; then
+      status=`state_str "$last_status"`
+      if [ $? -eq 0 ]; then
+        echo "$status - got from cache, last tested at `date -d @$last_check_time`"
+      fi
+
       exit $last_status
     fi
   fi
 fi
 
-declare -i n_failed=0 n_left=$#
+declare -i n_ok=0 n_failed=0 n_total=$# n_left=$#
 while [ $n_left -gt 0 -a -n "$1" ]; do
   n_left=$(( $n_left - 1 ))
   test_url="$1"
@@ -242,7 +296,11 @@ while [ $n_left -gt 0 -a -n "$1" ]; do
     ${curl_opts:+$curl_opts} ${net_if:+--interface "$net_if"} -L \
     --max-redirs $max_redirs --retry 0 -o /dev/null -s "$test_url"
   status=$?
-  [ $status -ne 0 ] && n_failed+=1
+  if [ $status -eq 0 ]; then
+    n_ok+=1
+  else
+    n_failed+=1
+  fi
 
   if [ $status -eq 0 -a $(( $n_left + $n_failed )) -lt $n_critical  ]; then
     # even if next tests fail, it won't reach $n_critical
@@ -274,5 +332,7 @@ if [ -n "$use_cache" ]; then
     warn "unable to link to cache file '$cache_file'"
   fi
 fi
+
+status_line $exit_code $n_ok $n_failed
 
 exit $exit_code
