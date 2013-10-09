@@ -190,8 +190,7 @@ while getopts $getopt_flags OPTNAME; do
 
       for name_value in "${received_options[@]}"; do
         if ! [[ "$name_value" =~ ^([A-Za-z0-9_]+)=(.+) ]]; then
-          warn "skipping invalid option '$name_value'"
-          continue
+          error "option specified in an invalid format: '$name_value'"
         fi
 
         opt_name=${name_value%%=*}
@@ -200,7 +199,7 @@ while getopts $getopt_flags OPTNAME; do
         if is_in_array "$opt_name" ${accepted_opt_names[@]}; then
           eval "$opt_name"=`printf '%q' "$opt_value"`
         else
-          warn "skipping invalid option name '$opt_name'"
+          error "unknown option name '$opt_name'"
         fi
       done
       ;;
