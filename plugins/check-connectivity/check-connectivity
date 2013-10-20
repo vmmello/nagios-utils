@@ -105,11 +105,11 @@ status_line() {
 
   line="`state_str $code` -"
   if [ $n_ok -gt 0 ]; then
-    line+=" $n_ok successful repl"
-    if [ $n_ok -gt 1 ]; then
-      line+="ies"
-    else
-      line+="y"
+    line+=" $n_ok successful"
+    if [ $n_failed -eq 0 -a $n_ok -gt 1 ]; then
+      line+=" responses"
+    elif [ $n_failed -gt 0 ]; then
+      line+=","
     fi
   fi
 
