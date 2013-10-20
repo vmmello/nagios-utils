@@ -21,6 +21,7 @@ Usage: $prog <-4 | -6> [ OPTIONS ] <-c n_critical> <-w n_warning> <url1> [ url2 
     -T <tag_name>    name to use as the cache file
     -N               disable cache (don't cache the result)
     -d               enable debug mode
+    -v               verbose mode. Print step information
     -O name=value    set the given option name to the specified value
                      Accepted names:
                          connect_timeout (is)
@@ -31,7 +32,6 @@ Usage: $prog <-4 | -6> [ OPTIONS ] <-c n_critical> <-w n_warning> <url1> [ url2 
                          net_if (S)
                      Expected value format:
                          (is = integer seconds, i = integer, S = string)
-
 "
   exit 1
 }
@@ -123,10 +123,20 @@ status_line() {
   echo "$line"
 }
 
+verbose_line() {
+  local msg="$1"
+
+  [ -z "$verbose" ] && return 0
+
+  echo -e "$msg"
+}
+
 # main
 
 unset n_failed n_critical user_def_tag use_cache disable_cache curl_opts net_if
-getopt_flags='46dc:D:w:O:N'
+unset verbose
+
+getopt_flags='46dc:D:w:O:Nv'
 proto=''
 while getopts $getopt_flags OPTNAME; do
   case $OPTNAME in
@@ -202,6 +212,9 @@ while getopts $getopt_flags OPTNAME; do
         fi
       done
       ;;
+    v)
+      verbose=1
+      ;;
     *)
       exit $NAGIOS_UNKNOWN
       ;;
@@ -246,11 +259,14 @@ cache_file="$cache_dir/$tag_name"
 # cache is enabled, cache_dir exists and is writable and
 # cache file is a link or not exists
 if [ -z "$disable_cache" -a -d "$cache_dir" -a -w "$cache_dir" ] && [ -L "$cache_file" -o ! -e "$cache_file" ]; then
+  verbose_line "Using cache file '$cache_file'"
   use_cache=1
 elif [ -z "$disable_cache" -a ! -e "$cache_dir" ]; then
   mkdir "$cache_dir"
   if [ $? -ne 0 ]; then
     warn "unable to create cache_dir '$cache_dir'. Skipping caching..."
+  else
+    verbose_line "Created cache directory '$cache_dir'"
   fi
 elif [ -z "$disable_cache" -a ! -d "$cache_dir" ]; then
   warn "cache_dir path '$cache_dir' exists but is not a directory. Skipping caching..."
@@ -265,23 +281,28 @@ if [ -n "$use_cache" -a -L "$cache_file" ]; then
   elif ! [[ "$status_str" =~ ^[0123]:[0-9]+$ ]]; then
     warn "data from cache file is not in the desired format (exit_code:epoch)"
   else
+    verbose_line "Got status line from cache: $status_str"
     # the cache string is the contents of the link de-referenced
     # it should be in the format: exit_code:epoch, e.g.: 0:1372741914
     last_status=${status_str%%:*}
     last_check_time=${status_str##*:}
 
+    verbose_line "Status from cache: $last_status, last_check_time = $last_check_time"
     now=$(date +%s)
     if [ $? -ne 0 ]; then
       error "unable to determine current time"
     fi
 
     if [ $(( $now - $last_check_time )) -le $cache_time ]; then
+      verbose_line "Cache contents is fresh, using it\n"
       status=`state_str "$last_status"`
       if [ $? -eq 0 ]; then
         echo "$status - got from cache, last tested at `date -d @$last_check_time`"
       fi
 
       exit $last_status
+    else
+      verbose_line "Cache contents it not fresh, re-testing all URLs\n"
     fi
   fi
 fi
@@ -290,21 +311,28 @@ declare -i n_ok=0 n_failed=0 n_total=$# n_left=$#
 while [ $n_left -gt 0 -a -n "$1" ]; do
   n_left=$(( $n_left - 1 ))
   test_url="$1"
+
+  verbose_line "Testing URL '$test_url'"
+
   curl $proto --connect-timeout $connect_timeout --max-time $transfer_timeout \
     ${curl_opts:+$curl_opts} ${net_if:+--interface "$net_if"} -L \
     --max-redirs $max_redirs --retry 0 -o /dev/null -s "$test_url"
   status=$?
   if [ $status -eq 0 ]; then
+    verbose_line "Successfully got a response from '$test_url'\n"
     n_ok+=1
   else
+    verbose_line "Failed request on $test_url\n"
     n_failed+=1
   fi
 
   if [ $status -eq 0 -a $(( $n_left + $n_failed )) -lt $n_critical  ]; then
     # even if next tests fail, it won't reach $n_critical
     # so no need to test anymore
+    verbose_line "Received $n_ok successful responses, ending test\n"
     break
   elif [ $status -ne 0 -a $n_failed -eq $n_critical ]; then
+    verbose_line "Received $n_failed failed responses, ending test\n"
     # too many failures, don't need to test anymore
     break
   fi
