@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+
+declare -r NAGIOS_SUCCESS=0 NAGIOS_WARNING=1 NAGIOS_CRITICAL=2 NAGIOS_UNKNOWN=3
+declare -r NEW_LINE=$(echo -e '\n')
+
+usage() {
+  echo "Usage: $0 [ OPTIONS ] <domain.tld>
+
+Options
+    -d        debug
+    -v        verbosely print test steps
+"
+
+  exit 1
+}
+
+resolve_record() {
+  # params:  server domain record_type
+  local server="$1"
+  local domain="$2"
+  local record_type="$3"
+
+  dig +short ${server:+"@$server"} "$domain" "$record_type"
+}
+
+error() {
+  local msg=${1:-""}
+  local code=${2:-$NAGIOS_UNKNOWN}
+
+  echo "Error: $msg" >&2
+  exit $code
+}
+
+is_in_array() {
+  local value="$1"
+  shift
+
+  local v
+
+  for v in "$@"; do
+    if [ "$v" == "$value" ]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+verbose_line() {
+  local line="$1"
+
+  if [ $verbose -eq 0 ]; then
+    return 1
+  fi
+
+  echo -e "$line\n"
+}
+
+# main
+verbose=0
+getopt_flags='v'
+while getopts $getopt_flags OPT; do
+  case "$OPT" in
+    d)
+      set -x
+      shift
+      ;;
+    v)
+      verbose=1
+      shift
+      ;;
+  esac
+done
+
+[ -z "$1" ] && usage
+
+if ! hash dig &>/dev/null; then
+  echo "Error: couldn't find binary dig in PATH. This script depends on it." >&2
+  exit 1
+fi
+
+domain="$1"
+verbose_line "Trying to get DNS servers for domain $domain..."
+records=$(resolve_record '' "$1" ns)
+status=$?
+if [ $status -ne 0 ]; then
+  error "unable to resolve dns for domain '$1'. resolve_records() returned $status"
+elif [ -z "$records" ]; then
+  error "unable to resolve dns for domain '$1'"
+fi
+
+verbose_line "Found `echo "$records" | wc -l` servers for domain $domain:\n$records"
+
+declare -a servers_ar
+read -d "$NEW_LINE" -a servers_ar <<< "$records"
+
+declare -a soa_lines_ar
+declare -i n_successful_rsps=0
+declare -i n_failed_rsps=0
+
+for server in ${servers_ar[@]}; do
+  verbose_line "Testing server '$server'..."
+  soa=$(resolve_record "$server" "$domain" soa)
+  if [ $? -ne 0 -o -z "$soa" ]; then
+    n_failed_rsps+=1
+    verbose_line "Failed querying $server" >&2
+    continue
+  fi
+
+  verbose_line "Received SOA: $soa"
+  if ! is_in_array "$soa" "${soa_lines_ar[@]}"; then
+    soa_lines_ar+=( "$soa" )
+  fi
+done
+
+n_soa=${#soa_lines_ar[@]}
+n_servers=${#servers_ar[@]}
+if [ $n_soa -eq 0 ]; then
+  echo "CRITICAL - domain $domain, received no response from the $n_servers servers tested" $NAGIOS_CRITICAL
+elif [ $n_soa -eq 1 ]; then
+  echo "OK - domain $domain, received the same SOA from $n_servers servers. SOA TEXT: ${soa_lines_ar[0]}"
+  exit $NAGIOS_OK
+else
+  echo "CRITICAL - domain $domain, received $n_soa different SOA replies from $n_servers servers tested"
+  exit $NAGIOS_CRITICAL
+fi
