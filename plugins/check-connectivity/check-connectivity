@@ -36,7 +36,7 @@ Usage: $prog <-4 | -6> [ OPTS ] <-c n_critical> <-w n_warning> <url1> [ ... ] [ 
                      Expected value format:
                          (is = integer seconds, i = integer, S = string)
 "
-  exit 1
+  exit $NAGIOS_UNKNOWN
 }
 
 error() {
@@ -143,7 +143,9 @@ verbose_line() {
 
 # main
 
-unset n_failed n_critical user_def_tag use_cache disable_cache curl_opts net_if
+[ $# -lt 5 ] && usage
+
+unset n_failed n_critical n_warning user_def_tag use_cache disable_cache curl_opts net_if
 unset verbose
 
 getopt_flags='46dc:D:w:O:Nv'
@@ -296,7 +298,8 @@ if [ -n "$use_cache" -a -L "$cache_file" ]; then
   if [ $? -ne 0 ]; then
     warn "unable to read from cache file"
   elif ! [[ "$status_str" =~ ^[0123]:[0-9]+$ ]]; then
-    warn "data from cache file is not in the desired format (exit_code:epoch)"
+    warn "data from cache file is not in the desired format (exit_code:epoch).\
+ Ignoring cache information..."
   else
     verbose_line "Got status line from cache: $status_str"
     # the cache string is the contents of the link de-referenced
@@ -372,7 +375,7 @@ if [ -n "$use_cache" ]; then
     error "unable to determine current time"
   fi
 
-  if [ -n "$use_cache" ] && ! ln -sf "$exit_code:$now" "$cache_file"; then
+  if ! ln -sf "$exit_code:$now" "$cache_file"; then
     warn "unable to link to cache file '$cache_file'"
   fi
 fi
