@@ -12,25 +12,59 @@ curl can be used to determine network reachability.
 
 
 One of the most relevant use cases is to set it as the check-host command 
-of routers, so that it detects connectivity downtime quickly and avoids 
-floods of downtime notifications for other checks that require 
-Internet connectivity. It's also possible to cache the response in order to
-avoid unnecessary checks in a short interval (when the host is set as parent
-host related to multiple other checks).
+of routers that are set as parent of external hosts, so that it detects 
+connectivity downtime quickly and avoids floods of downtime notifications 
+for other checks that require Internet connectivity. By default it also
+caches the response in order to avoid unnecessary checks in a short interval.
 
 IPv4 and IPv6 connectivity should be tested separately in order to test
 routing reachability of each protocol.
 
-It uses the curl program to do the connection tests and measure response 
-times.
+It uses the curl program to do the connection tests.
 
 
 REQUIREMENTS
 
 bash >= 3.x
-curl program installed
+curl
+
+
+SETUP
+
+The caching functionality uses by default the directory
+/var/cache/check-connectivity. To use this directory it's needed to create
+it and set the proper permissions to the nagios user. It's possible to do it
+with the following commands:
+
+# mkdir /var/cache/check-connectivity
+# chown nagios:nagios /var/cache/check-connectivity
 
 
 CONFIGURATION EXAMPLES
 
-(...soon...)
+define command {
+  command_name check_connectivity_IPv4
+  command_line $USER4$/check-connectivity -4 -c 3 -w 0 www.google.com www.bing.com www.amazon.com www.facebook.com www.youtube.com
+}
+
+define command {
+  command_name check_connectivity_IPv6
+  command_line $USER4$/check-connectivity -6 -c 3 -w 0 www.google.com www.bing.com www.facebook.com www.youtube.com www.yahoo.com
+}
+
+define host {
+  host_name Internet_IPv4
+  use generic-host
+  check_command check_connectivity_IPv4
+  max_check_attempts 1
+  address 127.0.0.20
+}
+
+define host {
+  host_name Internet_IPv6
+  use generic-host
+  check_command check_connectivity_IPv6
+  max_check_attempts 1
+  address ::6
+}
+
