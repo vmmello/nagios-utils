@@ -8,10 +8,10 @@ usage() {
 
 Options
     -d        debug
-    -v        verbosely print test steps
+    -v        verbosely print test steps (for testing only)
 "
 
-  exit 1
+  exit $NAGIOS_UNKNOWN
 }
 
 resolve_record() {
@@ -76,7 +76,7 @@ done
 
 if ! hash dig &>/dev/null; then
   echo "Error: couldn't find binary dig in PATH. This script depends on it." >&2
-  exit 1
+  exit $NAGIOS_UNKNOWN
 fi
 
 domain="$1"
@@ -84,9 +84,11 @@ verbose_line "Trying to get DNS servers for domain $domain..."
 records=$(resolve_record '' "$1" ns)
 status=$?
 if [ $status -ne 0 ]; then
-  error "unable to resolve dns for domain '$1'. resolve_records() returned $status"
+  echo "CRITICAL - unable to resolve dns for domain '$1'. resolve_records() returned $status"
+  exit $NAGIOS_CRITICAL
 elif [ -z "$records" ]; then
-  error "unable to resolve dns for domain '$1'"
+  echo "CRITICAL - received an empty response while resolving NS servers for domain '$domain'"
+  exit $NAGIOS_CRITICAL
 fi
 
 verbose_line "Found `echo "$records" | wc -l` servers for domain $domain:\n$records"
@@ -116,7 +118,8 @@ done
 n_soa=${#soa_lines_ar[@]}
 n_servers=${#servers_ar[@]}
 if [ $n_soa -eq 0 ]; then
-  echo "CRITICAL - domain $domain, received no response from the $n_servers servers tested" $NAGIOS_CRITICAL
+  echo "CRITICAL - domain $domain, received no response from the $n_servers servers tested"
+  exit $NAGIOS_CRITICAL
 elif [ $n_soa -eq 1 ]; then
   echo "OK - domain $domain, received the same SOA from $n_servers servers. SOA TEXT: ${soa_lines_ar[0]}"
   exit $NAGIOS_OK
