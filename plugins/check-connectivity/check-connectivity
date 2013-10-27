@@ -12,7 +12,10 @@ tag_name="connectivity"
 usage() {
   local prog=$(basename $0)
   echo "
-Usage: $prog <-4 | -6> [ OPTIONS ] <-c n_critical> <-w n_warning> <url1> [ url2 ] [ ... ] [ urlN ]
+This script tests several URLs in a row to determine whether IPv4 or IPv6
+routing is working.
+
+Usage: $prog <-4 | -6> [ OPTS ] <-c n_critical> <-w n_warning> <url1> [ ... ] [ urlN ]
 
   Options:
     -4               check IPv4 connectivity
@@ -21,7 +24,7 @@ Usage: $prog <-4 | -6> [ OPTIONS ] <-c n_critical> <-w n_warning> <url1> [ url2 
     -T <tag_name>    name to use as the cache file
     -N               disable cache (don't cache the result)
     -d               enable debug mode
-    -v               verbose mode. Print step information
+    -v               verbose mode. Print step information (for testing only)
     -O name=value    set the given option name to the specified value
                      Accepted names:
                          connect_timeout (is)
@@ -106,9 +109,10 @@ status_line() {
   line="`state_str $code` -"
   if [ $n_ok -gt 0 ]; then
     line+=" $n_ok successful"
-    if [ $n_failed -eq 0 -a $n_ok -gt 1 ]; then
-      line+=" responses"
-    elif [ $n_failed -gt 0 ]; then
+    if [ $n_failed -eq 0 ]; then
+      line+=" response"
+      [ $n_ok -gt 1 ] && line+="s"
+    else
       line+=","
     fi
   fi
@@ -145,6 +149,11 @@ while getopts $getopt_flags OPTNAME; do
         error "either -4 or -6 should be used, not both"
       else
         proto="-$OPTNAME"
+        if [ "$OPTNAME" == 4 ]; then
+          proto_string="IPv4"
+        else
+          proto_string="IPv6"
+        fi
       fi
       ;;
     c)
@@ -254,6 +263,8 @@ elif [ -z "$user_def_tag" -a "$proto" == "-6" ]; then
   tag_name+="_ipv6"
 fi
 
+verbose_line "Will test for $proto_string addresses"
+
 cache_file="$cache_dir/$tag_name"
 
 # cache is enabled, cache_dir exists and is writable and
@@ -297,7 +308,7 @@ if [ -n "$use_cache" -a -L "$cache_file" ]; then
       verbose_line "Cache contents is fresh, using it\n"
       status=`state_str "$last_status"`
       if [ $? -eq 0 ]; then
-        echo "$status - got from cache, last tested at `date -d @$last_check_time`"
+        echo "$status - using cached response, last tested at `date -d @$last_check_time`"
       fi
 
       exit $last_status
