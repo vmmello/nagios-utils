@@ -4,7 +4,7 @@ declare -i connect_timeout=2 transfer_timeout=2 max_redirs=2
 declare -i cache_time=60
 declare -r NAGIOS_SUCCESS=0 NAGIOS_WARNING=1 NAGIOS_CRITICAL=2 NAGIOS_UNKNOWN=3
 declare -a accepted_opt_names=( connect_timeout transfer_timeout max_redirs cache_time curl_opts net_if )
-declare -a received_options
+declare -a received_options failed_list
 
 cache_dir="/var/cache/check-connectivity"
 tag_name="connectivity"
@@ -119,9 +119,15 @@ status_line() {
 
   if [ $n_failed -gt 0 ]; then
     line+=" $n_failed failed request"
-    if [ $n_failed -gt 1 ]; then
-      line+="s"
-    fi
+    [ $n_failed -gt 1 ] && line+="s"
+
+    line+=" ("
+    local url
+    for url in ${failed_list[@]}; do
+      line+="$url, "
+    done
+    line=${line%, }
+    line+=")"
   fi
 
   echo "$line"
@@ -334,6 +340,7 @@ while [ $n_left -gt 0 -a -n "$1" ]; do
     n_ok+=1
   else
     verbose_line "Failed request on $test_url\n"
+    failed_list+=("$test_url")
     n_failed+=1
   fi
 
