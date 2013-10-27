@@ -1,6 +1,6 @@
 #!/bin/bash
 
-declare -i connect_timeout=2 transfer_timeout=2 max_redirs=2
+declare -i connect_timeout=2 transfer_timeout=4 max_redirs=2
 declare -i cache_time=60
 declare -r NAGIOS_SUCCESS=0 NAGIOS_WARNING=1 NAGIOS_CRITICAL=2 NAGIOS_UNKNOWN=3
 declare -a accepted_opt_names=( connect_timeout transfer_timeout max_redirs cache_time curl_opts net_if )
