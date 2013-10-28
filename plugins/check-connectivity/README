@@ -1,5 +1,5 @@
 
-This script verifies the network connectivity by checking the reachability
+This plugin verifies the network connectivity by checking the reachability
 of multiple web sites. It implicitly checks for multiple aspects of the 
 connectivity, like:
 
