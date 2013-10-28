@@ -1,0 +1,6 @@
+
+This repository contains a selection of plugins for the nagios
+(http://www.nagios.org/) monitoring system.
+
+Though the return codes and output follow the nagios specifications,
+most of it can be run standalone on any system with the bash shell.
