@@ -1,0 +1,30 @@
+
+This plugin gets all authoritative DNS servers of a domain and tests
+whether all of it reply with the same serial in the SOA record.
+
+The list of DNS servers is fetched from the NS record list of the domain. It
+uses the local resolver to do the DNS queries (there's no need to pass the
+list of DNS servers to test).
+
+
+SAMPLE CONFIGURATION
+
+define command {
+  command_name check_dns_soa_serial
+  command_line $USER4$/check-dns-soa-serial $ARG1$
+}
+
+define service {
+  use generic-service
+  host_name localhost
+  service_description SOA Serial - domain.com
+  check_command check_dns_soa_serial!domain.com
+}
+
+define service {
+  use generic-service
+  host_name localhost
+  service_description SOA Serial - another.org
+  check_command check_dns_soa_serial!another.org
+}
+
