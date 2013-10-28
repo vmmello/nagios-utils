@@ -20,7 +20,7 @@ resolve_record() {
   local domain="$2"
   local record_type="$3"
 
-  dig +short ${server:+"@$server"} "$domain" "$record_type"
+  dig +short ${server:+"@$server"} "$domain" "$record_type" 2>/dev/null
 }
 
 error() {
@@ -96,7 +96,7 @@ verbose_line "Found `echo "$records" | wc -l` servers for domain $domain:\n$reco
 declare -a servers_ar
 read -d "$NEW_LINE" -a servers_ar <<< "$records"
 
-declare -a soa_lines_ar
+declare -a serials_ar
 declare -i n_successful_rsps=0
 declare -i n_failed_rsps=0
 
@@ -110,20 +110,23 @@ for server in ${servers_ar[@]}; do
   fi
 
   verbose_line "Received SOA: $soa"
-  if ! is_in_array "$soa" "${soa_lines_ar[@]}"; then
-    soa_lines_ar+=( "$soa" )
+  IFS=" " read dns1 email serial remaining <<< "$soa"
+  verbose_line "Serial: $serial"
+
+  if ! is_in_array "$serial" "${serials_ar[@]}"; then
+    serials_ar+=( "$serial" )
   fi
 done
 
-n_soa=${#soa_lines_ar[@]}
+n_serials=${#serials_ar[@]}
 n_servers=${#servers_ar[@]}
-if [ $n_soa -eq 0 ]; then
+if [ $n_serials -eq 0 ]; then
   echo "CRITICAL - domain $domain, received no response from the $n_servers servers tested"
   exit $NAGIOS_CRITICAL
-elif [ $n_soa -eq 1 ]; then
-  echo "OK - domain $domain, received the same SOA from $n_servers servers. SOA TEXT: ${soa_lines_ar[0]}"
+elif [ $n_serials -eq 1 ]; then
+  echo "OK - domain $domain, received the same serial number from $n_servers servers. Serial: ${serials_ar[0]}"
   exit $NAGIOS_OK
 else
-  echo "CRITICAL - domain $domain, received $n_soa different SOA replies from $n_servers servers tested"
+  echo "CRITICAL - domain $domain, received $n_serials different serial numbers from $n_servers servers tested"
   exit $NAGIOS_CRITICAL
 fi
