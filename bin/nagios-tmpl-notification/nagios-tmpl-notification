@@ -1,0 +1,108 @@
+#!/bin/bash
+
+usage() {
+  echo "Usage: `basename "$0"` [ OPTIONS ] <msg_file.txt>
+
+  Options:
+    -x script.sh              script to be sourced to import variables (this
+                              option can be used multiple times to source 
+                              multiple scripts)  
+
+    -z                        don't add the default auxiliary variables (use
+                              only the ones provided by nagios or by the
+                              user through option -x)
+
+    -O                        don't display the error of running outside nagios
+"
+  exit 1
+}
+
+error() {
+  local msg="$1"
+  local ex=${2:-1}
+
+  echo "Error: $msg" 1>&2
+
+  exit $ex
+}
+
+validate_file() {
+  local file="$1"
+
+  if [ -f "$file" ]; then
+    return 0
+  elif [ ! -e "$file" ]; then
+    echo "file '$file' doesn't exist" 1>&2
+  elif [ ! -f "$file" ]; then
+    echo "path '$file' is not a regular file"
+  fi
+
+  return 1
+}
+
+[ $# -eq 0 ] && usage
+
+if ! hash sed &>/dev/null; then
+  error "didn't find sed command in PATH. This script requires sed"
+fi
+
+declare -a external_xform
+
+unset no_default_vars running_outside
+getopt_flags='x:zO'
+while getopts $getopt_flags OPTN; do
+  case "$OPTN" in
+    x)
+      if validate_file "$OPTARG"; then
+        external_xform+=( "$OPTARG" )
+      else
+        error "unable to validate path '$OPTARG'"
+      fi
+      ;;
+    z)
+      no_default_vars=1
+      ;;
+    O)
+      running_outside=1
+      ;;
+    *)
+      exit 1
+      ;;
+  esac
+done
+[ $OPTIND -gt 1 ] && shift $(( $OPTIND - 1 ))
+
+msg_file="$1"
+if [ -z "$msg_file" ]; then
+  usage
+elif ! validate_file "$msg_file"; then
+  error "unable to use regular file '$msg_file'"
+fi
+
+if [ -z "${!NAGIOS_*}" ]; then
+  error "no variable prefixed with NAGIOS_ found. Doesn't seem to be running on nagios"
+fi
+
+if [ -z "$msg_file" ]; then
+  error "missing parameter -m"
+fi
+
+if [ -z "$no_default_vars" ]; then
+  if [ -n "$NAGIOS_EPOCH" ]; then
+    NAGIOS_TIME_STR=`date -d @$NAGIOS_EPOCH`
+  fi
+fi
+
+for file in "${external_xform[@]}"; do
+  if ! source "$file"; then
+    error "file '$file' doesn't seem to have a valid syntax"
+  fi
+done
+
+sed_expr=''
+for v in "${!NAGIOS_@}"; do
+  short_var=${v#NAGIOS_}
+  sed_expr+="s/@@$short_var@@/${!v}/g;"
+done
+
+sed -e "$sed_expr" "$msg_file"
