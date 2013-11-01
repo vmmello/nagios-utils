@@ -101,10 +101,6 @@ if [ -z "${!NAGIOS_*}" ]; then
   error "no variable prefixed with NAGIOS_ found. Doesn't seem to be running on nagios"
 fi
 
-if [ -z "$msg_file" ]; then
-  error "missing parameter -m"
-fi
-
 if [ -z "$no_default_vars" ]; then
   if [ -n "$NAGIOS_EPOCH" ]; then
     NAGIOS_TIME_STR=`date -d @$NAGIOS_EPOCH`
