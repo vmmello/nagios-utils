@@ -11,8 +11,6 @@ usage() {
     -z                        don't add the default auxiliary variables (use
                               only the ones provided by nagios or by the
                               user through option -x)
-
-    -O                        don't display the error of running outside nagios
 "
   exit 1
 }
@@ -66,8 +64,8 @@ fi
 
 declare -a external_xform
 
-unset no_default_vars running_outside
-getopt_flags='x:zO'
+unset no_default_vars
+getopt_flags='x:z'
 while getopts $getopt_flags OPTN; do
   case "$OPTN" in
     x)
@@ -79,9 +77,6 @@ while getopts $getopt_flags OPTN; do
       ;;
     z)
       no_default_vars=1
-      ;;
-    O)
-      running_outside=1
       ;;
     *)
       exit 1
@@ -95,10 +90,6 @@ if [ -z "$msg_file" ]; then
   usage
 elif ! validate_file "$msg_file"; then
   error "unable to use regular file '$msg_file'"
-fi
-
-if [ -z "${!NAGIOS_*}" ]; then
-  error "no variable prefixed with NAGIOS_ found. Doesn't seem to be running on nagios"
 fi
 
 if [ -z "$no_default_vars" ]; then
