@@ -40,6 +40,24 @@ validate_file() {
   return 1
 }
 
+escape_sed() {
+  local str="$1"
+  local escaped="$str"
+
+  escaped=${escaped//\'/\\\'}
+  escaped=${escaped//\*/\\*}
+  escaped=${escaped//\;/\\;}
+  escaped=${escaped//\[/\\[}
+  escaped=${escaped//\]/\\]}
+  escaped=${escaped//\\+/+\]}
+  escaped=${escaped//\\\?/\?}
+  escaped=${escaped//\\\(/\(}
+  escaped=${escaped//\\\)/\)}
+  escaped=${escaped//\//\\/}
+
+  printf '%s' "$escaped"
+}
+
 [ $# -eq 0 ] && usage
 
 if ! hash sed &>/dev/null; then
@@ -102,7 +120,8 @@ done
 sed_expr=''
 for v in "${!NAGIOS_@}"; do
   short_var=${v#NAGIOS_}
-  sed_expr+="s/@@$short_var@@/${!v}/g;"
+  value="`escape_sed "${!v}"`"
+  sed_expr+="s/@@$short_var@@/$value/g;"
 done
 
 sed -e "$sed_expr" "$msg_file"
