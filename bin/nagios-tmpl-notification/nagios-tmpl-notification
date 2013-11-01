@@ -93,9 +93,22 @@ elif ! validate_file "$msg_file"; then
 fi
 
 if [ -z "$no_default_vars" ]; then
-  if [ -n "$NAGIOS_EPOCH" ]; then
-    NAGIOS_TIME_STR=`date -d @$NAGIOS_EPOCH`
-  fi
+
+  [ -n "$NAGIOS_LASTSERVICECHECK" ] && \
+    NAGIOS_LASTSERVICECHECK_FMT=`date -d @$NAGIOS_LASTSERVICECHECK`
+
+  [ -n "$NAGIOS_LASTSERVICEOK" ] && \
+    NAGIOS_LASTSERVICEOK_FMT=`date -d @$NAGIOS_LASTSERVICEOK`
+
+  [ -n "$NAGIOS_LASTSERVICECRITICAL" ] && \
+    NAGIOS_LASTSERVICECRITICAL_FMT=`date -d @$NAGIOS_LASTSERVICECRITICAL`
+
+  [ -n "$NAGIOS_LASTSERVICEUNKNOWN" ] && \
+    NAGIOS_LASTSERVICEUNKNOWN_FMT=`date -d @$NAGIOS_LASTSERVICEUNKNOWN`
+
+  [ -n "$NAGIOS_LASTSERVICESTATECHANGE" ] && \
+    NAGIOS_LASTSERVICESTATECHANGE_FMT=`date -d @$NAGIOS_LASTSERVICESTATECHANGE`
+
 fi
 
 for file in "${external_xform[@]}"; do
