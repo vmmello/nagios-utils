@@ -148,7 +148,7 @@ verbose_line() {
 unset n_failed n_critical n_warning user_def_tag use_cache disable_cache curl_opts net_if
 unset verbose
 
-getopt_flags='46dc:D:w:O:Nv'
+getopt_flags='46dc:D:w:O:NvT:'
 proto=''
 while getopts $getopt_flags OPTNAME; do
   case $OPTNAME in
