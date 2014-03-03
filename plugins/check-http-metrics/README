@@ -1,0 +1,10 @@
+
+This plugin does an HTTP request and measures the times of the response
+(nslookup time, connect time, header time, first byte time, total time)
+and compares it with the specified maximum values.
+
+It reports the status as CRITICAL when the response times are higher than
+the values specified. Otherwise it returns OK.
+
+It also outputs the performance metrics in the format expected by nagios
+for performance data.
