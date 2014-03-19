@@ -58,19 +58,21 @@ verbose_line() {
 
 # main
 verbose=0
-getopt_flags='v'
+getopt_flags='vd'
 while getopts $getopt_flags OPT; do
-  case "$OPT" in
+  case $OPT in
     d)
       set -x
-      shift
       ;;
     v)
       verbose=1
-      shift
+      ;;
+    *)
+      exit 1
       ;;
   esac
 done
+shift $(( $OPTIND - 1 ))
 
 [ -z "$1" ] && usage
 
