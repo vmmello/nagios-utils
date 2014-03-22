@@ -8,3 +8,10 @@ the values specified. Otherwise it returns OK.
 
 It also outputs the performance metrics in the format expected by nagios
 for performance data.
+
+
+------
+NOTE: this is work in progress. The measuring algorithm can have a few
+obvious bugs. As a simple metrics collection it's good, but problem 
+reporting might have a few false results.
+------
